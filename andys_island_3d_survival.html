@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Andy's Island 2: Abandoned Survival</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            color: #fff;
+            text-shadow: 2px 2px 4px #000;
+            pointer-events: none;
+        }
+
+        .ui-text {
+            font-size: 18px;
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Prompts */
+        #interaction-prompt {
+            position: absolute;
+            bottom: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 20px;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 10;
+            display: none;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: 1px solid #555;
+        }
+
+        /* Cutscene Screen */
+        #cutscene-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            text-align: center;
+            transition: opacity 1s ease;
+        }
+
+        .cutscene-title {
+            font-size: 32px;
+            color: #ff3333;
+            margin-bottom: 20px;
+            letter-spacing: 5px;
+            font-weight: bold;
+        }
+
+        .cutscene-text {
+            font-size: 20px;
+            max-width: 600px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+            color: #ccc;
+        }
+
+        .btn {
+            background: transparent;
+            color: #ff3333;
+            border: 2px solid #ff3333;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:hover {
+            background: #ff3333;
+            color: #000;
+            box-shadow: 0 0 15px #ff3333;
+        }
+
+        /* Jumpscare Screen */
+        #jumpscare-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 200;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #jumpscare-face {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, #550000 0%, #000000 100%);
+            animation: shake 0.1s infinite alternate;
+        }
+
+        #jumpscare-svg {
+            width: 60vh;
+            height: 60vh;
+            filter: drop-shadow(0 0 20px #ff0000);
+        }
+
+        @keyframes shake {
+            0% { transform: translate(5px, 5px) rotate(1deg); }
+            100% { transform: translate(-5px, -5px) rotate(-1deg); }
+        }
+
+        /* Audio Indicator Disclaimer */
+        #audio-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="ui-text" id="parts-display">BOAT PARTS: 0 / 4</div>
+        <div class="ui-text" id="objective-display">OBJECTIVE: Find parts along the beach to repair the escape boat.</div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="interaction-prompt">Press E to pick up Boat Part</div>
+
+    <!-- Intro / Outro Cutscenes -->
+    <div id="cutscene-overlay">
+        <div id="cutscene-content">
+            <div class="cutscene-title" id="story-title">ANDY'S ISLAND 2: THE LIGHTHOUSE PURGE</div>
+            <div class="cutscene-text" id="story-text">
+                The lighthouse is gone. Disassembled. Stripped down. Nothing remains but a vast, terrifyingly quiet beach surrounded by an overgrown dead jungle. 
+                <br><br>
+                You are stranded. Something is roaming the interior trees. Your only escape is to find the 4 missing mechanical engine components scattered across the island and reach the wreckage of the beach boat.
+            </div>
+            <button class="btn" id="story-btn" onclick="startIslandGame()">Begin Search</button>
+            <div id="audio-status">Procedural synthesizer audio will initialize on click.</div>
+        </div>
+    </div>
+
+    <!-- Jumpscare Display -->
+    <div id="jumpscare-overlay">
+        <div id="jumpscare-face">
+            <svg id="jumpscare-svg" viewBox="0 0 100 100">
+                <!-- Horrifying procedural face mask -->
+                <circle cx="50" cy="50" r="45" fill="#111" stroke="#ff0000" stroke-width="3"/>
+                <path d="M 25 35 Q 35 20 45 35" fill="none" stroke="#ff0000" stroke-width="4" />
+                <path d="M 55 35 Q 65 20 75 35" fill="none" stroke="#ff0000" stroke-width="4" />
+                <!-- Glowing bloodshot eyes -->
+                <circle cx="35" cy="35" r="5" fill="#ff0000">
+                    <animate attributeName="r" values="4;7;4" dur="0.1s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="65" cy="35" r="5" fill="#ff0000">
+                    <animate attributeName="r" values="4;7;4" dur="0.1s" repeatCount="indefinite"/>
+                </circle>
+                <!-- Monstrous jagged teeth mouth -->
+                <path d="M 20 65 Q 50 85 80 65 Q 50 55 20 65 Z" fill="#000" stroke="#ff0000" stroke-width="3"/>
+                <path d="M 25 64 L 30 72 L 35 64 L 40 73 L 45 64 L 50 75 L 55 64 L 60 73 L 65 64 L 70 71 L 75 64 L 80 64" fill="none" stroke="#ff0000" stroke-width="2"/>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        // Game State Variables
+        let scene, camera, renderer;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+        let prevTime = performance.now();
+        
+        let islandRadius = 160;
+        let partsCollected = 0;
+        const totalParts = 4;
+        let boatParts = [];
+        let escapeBoatInstance = null;
+        let monsterInstance = null;
+        
+        let gameActive = false;
+        let monsterSpeed = 23;
+        let monsterActiveTime = 0;
+
+        // Audio Context setup for jumpscare screamer & custom synthesizer atmosphere
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            try {
+                if (type === 'jumpscare') {
+                    // Ultra-loud terrifying distorted sub and screech synth combo
+                    for(let i=0; i<3; i++) {
+                        let osc = audioCtx.createOscillator();
+                        let gain = audioCtx.createGain();
+                        osc.type = i === 0 ? 'sawtooth' : (i === 1 ? 'square' : 'triangle');
+                        osc.frequency.setValueAtTime(80 + (i * 120), audioCtx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(30, audioCtx.currentTime + 1.5);
+                        
+                        // Modulate screech distortion
+                        if(i === 1) {
+                            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                            osc.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 0.3);
+                        }
+
+                        gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 2.0);
+                        
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 2.0);
+                    }
+                } else if (type === 'pickup') {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } else if (type === 'win') {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(554.37, audioCtx.currentTime + 0.2);
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.4);
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.6);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 1.2);
+                }
+            } catch(e) { console.log(e); }
+        }
+
+        // Initialize 3D Engine Environment Map
+        function init3DGame() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020208);
+            scene.fog = new THREE.FogExp2(0x020208, 0.025);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            // Spawn player safely on the sandy beach shoreline
+            camera.position.set(0, 3, islandRadius - 15);
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0x111122, 0.6);
+            scene.add(ambientLight);
+
+            const moonlight = new THREE.DirectionalLight(0x5566aa, 0.4);
+            moonlight.position.set(50, 100, 50);
+            scene.add(moonlight);
+
+            // Create Massive Abandoned Cylinder Island Environment
+            const terrainGeo = new THREE.CylinderGeometry(islandRadius, islandRadius + 10, 10, 64);
+            const terrainMat = new THREE.MeshStandardMaterial({ color: 0x221a15, roughness: 0.9 });
+            const islandBase = new THREE.Mesh(terrainGeo, terrainMat);
+            islandBase.position.y = -5;
+            scene.add(islandBase);
+
+            // Sand Beach Rim Layer
+            const beachGeo = new THREE.RingGeometry(islandRadius - 25, islandRadius + 5, 64);
+            const beachMat = new THREE.MeshStandardMaterial({ color: 0x6e5d4f, roughness: 0.8, side: THREE.DoubleSide });
+            const beach = new THREE.Mesh(beachGeo, beachMat);
+            beach.rotation.x = Math.PI / 2;
+            beach.position.y = 0.05;
+            scene.add(beach);
+
+            // Endless Low-Poly Ocean Surroundings
+            const waterGeo = new THREE.PlaneGeometry(2000, 2000, 32, 32);
+            const waterMat = new THREE.MeshStandardMaterial({ color: 0x050b14, roughness: 0.3, metalness: 0.1 });
+            const ocean = new THREE.Mesh(waterGeo, waterMat);
+            ocean.rotation.x = -Math.PI / 2;
+            ocean.position.y = -1;
+            scene.add(ocean);
+
+            // Spawn Dark Jungle & Overgrown Trees across center inner zone
+            const trunkGeo = new THREE.CylinderGeometry(0.6, 1, 12, 5);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x1a110b });
+            const leavesGeo = new THREE.DodecahedronGeometry(5, 1);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x0a140d, roughness: 0.9 });
+
+            for (let i = 0; i < 220; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                // Random position inside the dark inner overgrown center zone
+                const radius = Math.random() * (islandRadius - 30);
+                
+                const treeGroup = new THREE.Group();
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 6;
+                treeGroup.add(trunk);
+
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.y = 12;
+                treeGroup.add(leaves);
+
+                treeGroup.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+                scene.add(treeGroup);
+            }
+
+            // Place the Escape Boat on the main coordinate beach
+            const boatGroup = new THREE.Group();
+            const hullGeo = new THREE.BoxGeometry(5, 2, 10);
+            const hullMat = new THREE.MeshStandardMaterial({ color: 0x443322 });
+            const hull = new THREE.Mesh(hullGeo, hullMat);
+            boatGroup.add(hull);
+            
+            // Defective broken engine node indicator
+            const engineGeo = new THREE.BoxGeometry(1.5, 2, 1.5);
+            const engineMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.set(0, 1.5, -3);
+            boatGroup.add(engine);
+
+            boatGroup.position.set(0, 0.5, islandRadius - 10);
+            scene.add(boatGroup);
+            escapeBoatInstance = boatGroup;
+
+            // Scatter 4 Trackable Mechanical Boat Engine Parts along beach zones
+            const partGeo = new THREE.TorusGeometry(0.4, 0.15, 8, 16);
+            const partMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00aaaa });
+
+            const beachPositions = [
+                {x: islandRadius - 15, z: 0},
+                {x: -(islandRadius - 15), z: 15},
+                {x: 40, z: -(islandRadius - 15)},
+                {x: -60, z: -(islandRadius - 20)}
+            ];
+
+            for (let i = 0; i < totalParts; i++) {
+                const pMesh = new THREE.Mesh(partGeo, partMat);
+                pMesh.position.set(beachPositions[i].x, 0.8, beachPositions[i].z);
+                scene.add(pMesh);
+                boatParts.push(pMesh);
+            }
+
+            // Spawn the Shadow AI Stalker Monster
+            const monsterGroup = new THREE.Group();
+            const mBodyGeo = new THREE.CylinderGeometry(1.2, 0.2, 9, 6);
+            const mBodyMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const mBody = new THREE.Mesh(mBodyGeo, mBodyMat);
+            mBody.position.y = 4.5;
+            monsterGroup.add(mBody);
+
+            // Glowing red stalker eyes
+            const mEyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+            const mEyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const eye1 = new THREE.Mesh(mEyeGeo, mEyeMat);
+            eye1.position.set(0.4, 7.5, 1.1);
+            const eye2 = new THREE.Mesh(mEyeGeo, mEyeMat);
+            eye2.position.set(-0.4, 7.5, 1.1);
+            monsterGroup.add(eye1);
+            monsterGroup.add(eye2);
+
+            // Start monster deep hidden inside inner central forest core
+            monsterGroup.position.set(0, 0, -30);
+            scene.add(monsterGroup);
+            monsterInstance = monsterGroup;
+
+            // Renderer Hookup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            // Input Event Handling
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            container.addEventListener('click', requestPointerLock);
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove);
+        }
+
+        // Pointer Lock and Mouse look rotation setup
+        function requestPointerLock() {
+            if (gameActive) {
+                document.getElementById('canvas-container').requestPointerLock();
+            }
+        }
+
+        function onMouseMove(event) {
+            if (document.pointerLockElement !== document.getElementById('canvas-container')) return;
+            camera.rotation.y -= event.movementX * 0.0025;
+            camera.rotation.x -= event.movementY * 0.0025;
+            // Lock vertical look bounds
+            camera.rotation.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, camera.rotation.x));
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                case 'KeyE': checkPartCollection(); break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                case 'KeyD': case 'ArrowRight': moveRight = false; break;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Game Trigger Systems
+        function startIslandGame() {
+            initAudio();
+            document.getElementById('cutscene-overlay').style.display = 'none';
+            gameActive = true;
+            requestPointerLock();
+            prevTime = performance.now();
+            animateLoop();
+        }
+
+        function checkPartCollection() {
+            if (!gameActive) return;
+            
+            // Check interaction distance to parts
+            for (let i = 0; i < boatParts.length; i++) {
+                const part = boatParts[i];
+                if (!part.visible) continue;
+
+                const dist = camera.position.distanceTo(part.position);
+                if (dist < 6) {
+                    part.visible = false;
+                    partsCollected++;
+                    playSound('pickup');
+                    document.getElementById('parts-display').innerText = `BOAT PARTS: ${partsCollected} / ${totalParts}`;
+                    
+                    if (partsCollected === totalParts) {
+                        document.getElementById('objective-display').innerText = "OBJECTIVE: All parts found! Run back to the boat at the main coast coordinate!";
+                        // Turn boat highlight green
+                        escapeBoatInstance.children[1].material.color.setHex(0x00ff00);
+                    }
+                    return;
+                }
+            }
+
+            // Check interaction distance with the Escape Boat
+            const distToBoat = camera.position.distanceTo(escapeBoatInstance.position);
+            if (distToBoat < 10) {
+                if (partsCollected === totalParts) {
+                    triggerWinCutscene();
+                }
+            }
+        }
+
+        function triggerWinCutscene() {
+            gameActive = false;
+            document.exitPointerLock();
+            playSound('win');
+            
+            const overlay = document.getElementById('cutscene-overlay');
+            document.getElementById('story-title').innerText = "ESCAPE SUCCESSFUL";
+            document.getElementById('story-title').style.color = "#33ff33";
+            document.getElementById('story-text').innerHTML = "You fitted the collected scrap parts into the engine unit just in time. The motor sparks into life, roaring over the sound of snapping branches behind you. You accelerate out into the pitch dark ocean water, watching Andy's Island fade to a simple dark dot on the horizon.";
+            document.getElementById('story-btn').style.display = "none";
+            overlay.style.display = 'flex';
+        }
+
+        function triggerJumpscare() {
+            gameActive = false;
+            document.exitPointerLock();
+            playSound('jumpscare');
+            
+            document.getElementById('jumpscare-overlay').style.display = 'flex';
+            
+            // Switch scene background into a dead game over screen after 2.5 seconds
+            setTimeout(() => {
+                document.getElementById('jumpscare-overlay').style.display = 'none';
+                const overlay = document.getElementById('cutscene-overlay');
+                document.getElementById('story-title').innerText = "YOU WERE CAUGHT";
+                document.getElementById('story-title').style.color = "#ff0000";
+                document.getElementById('story-text').innerText = "The island claims another victim. Your bones join the wreckage in the overgrown jungle sands.";
+                document.getElementById('story-btn').innerText = "Try Again";
+                document.getElementById('story-btn').onclick = () => { location.reload(); };
+                overlay.style.display = 'flex';
+            }, 2500);
+        }
+
+        // Real-Time Frame Engine loop
+        function animateLoop() {
+            if (!gameActive) return;
+            requestAnimationFrame(animateLoop);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            // 1. Player Physics & Movement System
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            // Setup camera forward rotation on the horizontal vector layout
+            const camYaw = new THREE.Vector3();
+            camera.getWorldDirection(camYaw);
+            camYaw.y = 0;
+            camYaw.normalize();
+            
+            const camRight = new THREE.Vector3();
+            camRight.crossVectors(camYaw, camera.up).negate().normalize();
+
+            if (moveForward || moveBackward) {
+                velocity.z -= direction.z * 120.0 * delta;
+            }
+            if (moveLeft || moveRight) {
+                velocity.x -= direction.x * 120.0 * delta;
+            }
+
+            camera.position.addScaledVector(camYaw, -velocity.z * delta);
+            camera.position.addScaledVector(camRight, velocity.x * delta);
+
+            // Force bounding constraints to wrap player inside the Island island boundaries
+            const distFromCenter = Math.sqrt(camera.position.x ** 2 + camera.position.z ** 2);
+            if (distFromCenter > islandRadius) {
+                camera.position.setLength(islandRadius);
+            }
+            camera.position.y = 3; // Keep perspective steady
+
+            // 2. Continuous Part Rotations & UI Detection Prompts
+            let nearPart = false;
+            for (let i = 0; i < boatParts.length; i++) {
+                const part = boatParts[i];
+                if (part.visible) {
+                    part.rotation.x += 0.02;
+                    part.rotation.y += 0.03;
+                    if (camera.position.distanceTo(part.position) < 6) {
+                        nearPart = true;
+                    }
+                }
+            }
+
+            const distToBoat = camera.position.distanceTo(escapeBoatInstance.position);
+            if (distToBoat < 10 && partsCollected === totalParts) {
+                document.getElementById('interaction-prompt').innerText = "Press E to repair engine and ESCAPE!";
+                document.getElementById('interaction-prompt').style.display = 'block';
+            } else if (nearPart) {
+                document.getElementById('interaction-prompt').innerText = "Press E to pick up Boat Part";
+                document.getElementById('interaction-prompt').style.display = 'block';
+            } else {
+                document.getElementById('interaction-prompt').style.display = 'none';
+            }
+
+            // 3. Stalker AI Monster Behavior Track Setup
+            // The stalker accelerates its tracking velocity as time passes or items are gathered
+            monsterActiveTime += delta;
+            const dynamicSpeed = monsterSpeed + (partsCollected * 3.5) + Math.min(monsterActiveTime * 0.05, 12);
+            
+            const monsterPos = monsterInstance.position;
+            const targetPos = camera.position.clone();
+            targetPos.y = monsterPos.y; // Track on flat 2D projection plane
+
+            const mDirection = new THREE.Vector3().subVectors(targetPos, monsterPos);
+            const distanceToPlayer = mDirection.length();
+
+            // Look directly at player
+            monsterInstance.lookAt(targetPos.x, monsterPos.y, targetPos.z);
+
+            if (distanceToPlayer > 1.8) {
+                mDirection.normalize();
+                monsterInstance.position.addScaledVector(mDirection, dynamicSpeed * delta);
+            } else {
+                // Instantly engage jumpscare if stalker makes structural collision bounds contact
+                triggerJumpscare();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Init everything setup
+        init3DGame();
+    </script>
+</body>
+</html>
